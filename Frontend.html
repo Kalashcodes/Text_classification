@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hate Text Classifier</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #e9ecef;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            max-width: 700px;
+            width: 100%;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 25px;
+            font-size: 1.8em;
+        }
+        p.instructions {
+            font-size: 15px;
+            color: #555;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        textarea, input[type="file"], input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .result {
+            margin-top: 25px;
+            font-size: 1.2em;
+            text-align: center;
+            padding: 15px;
+            background-color: #f1f3f5;
+            border-radius: 8px;
+        }
+        .hidden {
+            display: none;
+        }
+        .download-btn {
+            background-color: #007bff;
+            color: white;
+            margin-top: 10px;
+        }
+        #comment-id-input {
+            width: 100%;
+            padding: 12px;
+            font-size: 1em;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        #get-emotion-btn {
+            margin-top: 15px;
+            background-color: #17a2b8;
+        }
+        #get-emotion-btn:hover {
+            background-color: #138496;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Hate Text Classifier</h2>
+    <p class="instructions">
+        <strong>Steps to use:</strong><br>
+        1. Enter a comment in the text box and click the "Classify" button to get the result.<br>
+        2. Alternatively, choose a CSV file, then click the "Classify" button to classify each comment for toxicity and emotion.<br>
+        3. Enter a specific <code>commentID</code> to get the emotion for that comment after toxicity classification.
+    </p>
+
+    <form id="classify-form">
+        <textarea id="text-input" rows="4" placeholder="Type your comment here..."></textarea>
+        <input type="file" id="file-input" accept=".csv">
+        <button type="submit">Classify</button>
+    </form>
+
+    <div class="result hidden" id="result"></div>
+    <button id="download-btn" class="hidden download-btn">Download Processed CSV</button>
+
+    <div class="hidden" id="emotion-section">
+        <input type="text" id="comment-id-input" placeholder="Enter Comment ID for Emotion Analysis" style="font-size: 1.1em; padding: 12px;">
+        <button id="get-emotion-btn">Get Emotion</button>
+    </div>
+    <div class="result hidden" id="emotion-result"></div>
+</div>
+
+<script>
+    const form = document.getElementById('classify-form');
+    const resultDiv = document.getElementById('result');
+    const textInput = document.getElementById('text-input');
+    const fileInput = document.getElementById('file-input');
+    const downloadBtn = document.getElementById('download-btn');
+    const emotionSection = document.getElementById('emotion-section');
+    const emotionResultDiv = document.getElementById('emotion-result');
+    const getEmotionBtn = document.getElementById('get-emotion-btn');
+    const commentIdInput = document.getElementById('comment-id-input');
+    let downloadUrl = '';  // Store the URL for the CSV blob
+
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        const userInput = textInput.value.trim();
+        const uploadedFile = fileInput.files[0];
+
+        // Reset the UI components
+        resultDiv.innerHTML = '';
+        resultDiv.classList.add('hidden');
+        downloadBtn.classList.add('hidden');
+        emotionSection.classList.add('hidden');
+        emotionResultDiv.classList.add('hidden');
+
+        if (userInput && uploadedFile) {
+            resultDiv.innerHTML = 'Please choose either a comment or a CSV file, not both.';
+            resultDiv.classList.remove('hidden');
+        } else if (userInput) {
+            classifyText(userInput);
+        } else if (uploadedFile) {
+            processCSVFile(uploadedFile);
+        } else {
+            resultDiv.innerHTML = 'Please enter a comment or upload a CSV file!';
+            resultDiv.classList.remove('hidden');
+        }
+    });
+
+    function classifyText(text) {
+        resultDiv.innerHTML = 'Classifying...';
+        fetch('http://127.0.0.1:5000/score_comment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commentID: Date.now().toString(), body: text })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Score Comment Response:', data); // Debugging line
+            resultDiv.innerHTML = `
+                <strong>Comment ID:</strong> ${data.commentID}<br>
+                <strong>Score:</strong> ${data.score}<br>
+                <strong>Toxicity Classification:</strong> ${data.classification}<br>
+                <strong>Toxicity Level:</strong> ${data.toxicity_level}
+            `;
+            resultDiv.classList.remove('hidden');
+            emotionSection.classList.remove('hidden'); // Show emotion section for further classification
+        })
+        .catch(error => {
+            resultDiv.innerHTML = 'Error classifying the comment: ' + error.message;
+            resultDiv.classList.remove('hidden');
+        });
+    }
+
+    function processCSVFile(file) {
+        resultDiv.innerHTML = 'Processing CSV file...';
+        const formData = new FormData();
+        formData.append('file', file);
+
+        fetch('http://127.0.0.1:5000/process_csv', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Error processing the CSV file');
+            return response.blob();
+        })
+        .then(blob => {
+            // Create a URL for the processed CSV blob and store it in a variable
+            downloadUrl = URL.createObjectURL(blob);
+            downloadBtn.classList.remove('hidden');
+            resultDiv.innerHTML = 'CSV processed successfully. Click the button below to download.';
+            resultDiv.classList.remove('hidden');
+        })
+        .catch(error => {
+            resultDiv.innerHTML = 'Error processing the CSV file: ' + error.message;
+            resultDiv.classList.remove('hidden');
+        });
+    }
+
+    // Add click event listener to download the CSV only when the button is clicked
+    downloadBtn.addEventListener('click', function() {
+        if (downloadUrl) {
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = 'processed_comments.csv';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } else {
+            resultDiv.innerHTML = 'No file available for download.';
+            resultDiv.classList.remove('hidden');
+        }
+    });
+
+    getEmotionBtn.addEventListener('click', function() {
+        const commentID = commentIdInput.value.trim();
+        if (!commentID) {
+            emotionResultDiv.innerHTML = 'Please enter a valid Comment ID.';
+            emotionResultDiv.classList.remove('hidden');
+            return;
+        }
+
+        emotionResultDiv.innerHTML = 'Fetching emotion...';
+        fetch('http://127.0.0.1:5000/emotion_classification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commentID: commentID, body: textInput.value }) // Send the body of the comment
+        })
+        .then(response => response.json())
+        .then(data => {
+            emotionResultDiv.innerHTML = `
+                <strong>Comment ID:</strong> ${data.commentID || commentID}<br>
+                <strong>Detected Emotion:</strong> ${data.emotion || 'N/A'}<br>
+                <strong>Emotion Score:</strong> ${data.emotion_score || 'N/A'}
+            `;
+            emotionResultDiv.classList.remove('hidden');
+        })
+        .catch(error => {
+            emotionResultDiv.innerHTML = 'Error fetching emotion: ' + error.message;
+            emotionResultDiv.classList.remove('hidden');
+        });
+    });
+</script>
+
+</body>
+</html>
